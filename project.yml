@@ -19,7 +19,7 @@ targets:
     info:
       path: App/Info.plist
       properties:
-        CFBundleDisplayName: 照片倒计时
+        CFBundleDisplayName: Love Time
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         ITSAppUsesNonExemptEncryption: false
@@ -39,7 +39,7 @@ targets:
     info:
       path: Widget/Info.plist
       properties:
-        CFBundleDisplayName: 照片倒计时组件
+        CFBundleDisplayName: Love Time
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
 schemes:
