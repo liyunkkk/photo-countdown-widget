@@ -104,7 +104,23 @@ enum WidgetStore {
         FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupId)
     }
 
+    /// 双通道写：UserDefaults + App Group 容器文件（哪个通道可用走哪个）
+    static func save(_ item: CountdownItem, for slot: WidgetSlot) {
+        guard let d = try? JSONEncoder().encode(item) else { return }
+        defaults?.set(d, forKey: "item.\(slot.rawValue)")
+        if let dir = containerURL {
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try? d.write(to: dir.appendingPathComponent("item.\(slot.rawValue).json"), options: .atomic)
+        }
+    }
+
+    /// 读：优先容器文件（与 UserDefaults 相同内容，文件通道更稳），回退 defaults，最后默认值
     static func item(for slot: WidgetSlot) -> CountdownItem {
+        if let dir = containerURL,
+           let d = try? Data(contentsOf: dir.appendingPathComponent("item.\(slot.rawValue).json")),
+           let it = try? JSONDecoder().decode(CountdownItem.self, from: d) {
+            return it
+        }
         if let d = defaults?.data(forKey: "item.\(slot.rawValue)"),
            let it = try? JSONDecoder().decode(CountdownItem.self, from: d) {
             return it
@@ -112,17 +128,17 @@ enum WidgetStore {
         return CountdownItem()
     }
 
-    static func save(_ item: CountdownItem, for slot: WidgetSlot) {
-        if let d = try? JSONEncoder().encode(item) {
-            defaults?.set(d, forKey: "item.\(slot.rawValue)")
+    /// 照片只能走容器文件；返回是否成功，失败要在 UI 上暴露而不是静默
+    @discardableResult
+    static func savePhoto(_ data: Data, for slot: WidgetSlot) -> Bool {
+        guard let dir = containerURL else { return false }
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try data.write(to: dir.appendingPathComponent("photo.\(slot.rawValue).img"), options: .atomic)
+            return true
+        } catch {
+            return false
         }
-    }
-
-    static func savePhoto(_ data: Data, for slot: WidgetSlot) {
-        guard let dir = containerURL else { return }
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let url = dir.appendingPathComponent("photo.\(slot.rawValue).img")
-        try? data.write(to: url, options: .atomic)
     }
 
     static func photoData(for slot: WidgetSlot) -> Data? {
@@ -131,7 +147,39 @@ enum WidgetStore {
         return FileManager.default.fileExists(atPath: url.path) ? (try? Data(contentsOf: url)) : nil
     }
 
+    static func clearPhoto(for slot: WidgetSlot) {
+        if let dir = containerURL {
+            try? FileManager.default.removeItem(at: dir.appendingPathComponent("photo.\(slot.rawValue).img"))
+        }
+        defaults?.removeObject(forKey: "photo.\(slot.rawValue)")
+    }
+
     static func reloadTimelines() {
         WidgetCenter.shared.reloadAllTimelines()
+    }
+
+    /// 诊断：App 内直接展示每一环的状态，一眼看出通道断在哪
+    static func diagnosis() -> [String] {
+        var lines: [String] = []
+        let fm = FileManager.default
+        if let dir = containerURL {
+            lines.append("✅ 容器: …/\(dir.path.split(separator: "/").suffix(2).joined(separator: "/"))")
+            for slot in WidgetSlot.allCases {
+                let jp = dir.appendingPathComponent("item.\(slot.rawValue).json")
+                let it = item(for: slot)
+                lines.append("item.\(slot.rawValue): \(fm.fileExists(atPath: jp.path) ? "文件✓" : "文件✗") 标题「\(it.title)」")
+                let pp = dir.appendingPathComponent("photo.\(slot.rawValue).img")
+                if let attr = try? fm.attributesOfItem(atPath: pp.path), let size = attr[.size] as? Int, size > 0 {
+                    lines.append("photo.\(slot.rawValue): \(size / 1024)KB")
+                } else {
+                    lines.append("photo.\(slot.rawValue): 无")
+                }
+            }
+        } else {
+            lines.append("❌ App Group 容器不可用（entitlement 未生效）")
+            lines.append("→ 重装 IPA 或检查巨魔安装日志")
+        }
+        lines.append("UserDefaults(suite): \(defaults != nil ? "对象可用" : "nil")")
+        return lines
     }
 }
