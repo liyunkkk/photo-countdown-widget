@@ -70,7 +70,7 @@ struct ContentView: View {
     private var previewCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("预览")
-                .font(.caption).weight(.semibold)
+                .font(.caption.weight(.semibold))
                 .foregroundColor(.secondary)
                 .textCase(.uppercase)
             WidgetVisual(slot: slot, photo: photo, item: item, date: Date())
