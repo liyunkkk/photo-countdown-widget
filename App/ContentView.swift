@@ -18,6 +18,7 @@ struct ContentView: View {
         ScrollView {
             VStack(spacing: 14) {
                 header
+                channelBanner
                 slotPicker
                 previewSection
                 editorCard
@@ -258,7 +259,7 @@ struct ContentView: View {
 
     private func save() {
         item.savedAt = Date().timeIntervalSince1970
-        WidgetStore.save(item, for: slot)
+        let itemOK = WidgetStore.save(item, for: slot)
 
         var photoOK = true
         if let img = photo {
@@ -270,8 +271,16 @@ struct ContentView: View {
         }
 
         WidgetStore.reloadTimelines()
-        UINotificationFeedbackGenerator().notificationOccurred(photoOK ? .success : .warning)
-        withAnimation { savedFlash = true; if !photoOK { saveError = "照片没能写入 App Group 容器（数据通道可能断了，展开下方诊断查看）" } }
+        UINotificationFeedbackGenerator().notificationOccurred(itemOK && photoOK ? .success : .warning)
+        withAnimation {
+            savedFlash = true
+            saveError = nil
+            if !itemOK {
+                saveError = "配置没能写入任何通道（M/F/D 全不可用，见上方通道状态）"
+            } else if !photoOK {
+                saveError = "照片没能写入任何通道（配置已保存，见上方通道状态）"
+            }
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) {
             withAnimation { savedFlash = false }
         }
@@ -290,6 +299,34 @@ struct ContentView: View {
     }
 
     // MARK: - 诊断
+
+    /// 常驻通道状态横幅：不点开也能看到数据通不通
+    private var channelBanner: some View {
+        let lines = diag.isEmpty ? WidgetStore.diagnosis() : diag
+        let ok = lines.contains { $0.hasPrefix("M 兜底目录: ✅") || $0.hasPrefix("F App Group: ✅") }
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(ok ? Color.green : Color.red)
+                    .frame(width: 8, height: 8)
+                Text(ok ? "共享通道正常" : "共享通道异常：数据存不进小组件")
+                    .font(.footnote.weight(.semibold))
+                Spacer()
+                Text(ok ? "OK" : "DEF" )
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundColor(.secondary)
+            }
+            ForEach(Array(lines.prefix(4)), id: \.self) { line in
+                Text(line)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(Color(.secondarySystemGroupedBackground)))
+    }
 
     private var diagnosisCard: some View {
         VStack(alignment: .leading, spacing: 8) {

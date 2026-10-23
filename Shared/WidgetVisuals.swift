@@ -39,9 +39,12 @@ struct WidgetVisual: View {
                         HStack {
                             Spacer()
                             Text(debugTag)
-                                .font(.system(size: 8, weight: .medium, design: .monospaced))
-                                .foregroundColor(.white.opacity(0.6))
-                                .padding(.trailing, 9)
+                                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(Capsule().fill(Color.black.opacity(0.5)))
+                                .padding(.trailing, 8)
                                 .padding(.bottom, 6)
                         }
                     }

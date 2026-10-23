@@ -99,36 +99,68 @@ struct CountdownItem: Codable, Equatable {
 
 enum WidgetStore {
     static let appGroupId = "group.com.qingxu.photowidget"
+    /// 巨魔兜底通道：不依赖 App Group 的固定路径（需 platform-application 权限）
+    static let mediaPath = "/var/mobile/Media/LoveTime"
 
-    static var defaults: UserDefaults? {
-        UserDefaults(suiteName: appGroupId)
-    }
+    static var defaults: UserDefaults? { UserDefaults(suiteName: appGroupId) }
+    static var containerURL: URL? { FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupId) }
 
-    static var containerURL: URL? {
-        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupId)
-    }
-
-    /// 双通道写：UserDefaults + App Group 容器文件（哪个通道可用走哪个）
-    static func save(_ item: CountdownItem, for slot: WidgetSlot) {
-        guard let d = try? JSONEncoder().encode(item) else { return }
-        defaults?.set(d, forKey: "item.\(slot.rawValue)")
-        if let dir = containerURL {
-            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            try? d.write(to: dir.appendingPathComponent("item.\(slot.rawValue).json"), options: .atomic)
+    /// 兜底目录：不存在则创建，并做真实写探测（只探测不写脏文件）
+    static var mediaURL: URL? {
+        let fm = FileManager.default
+        let dir = URL(fileURLWithPath: mediaPath, isDirectory: true)
+        if !fm.fileExists(atPath: dir.path) {
+            do { try fm.createDirectory(at: dir, withIntermediateDirectories: true) } catch { return nil }
         }
+        let probe = dir.appendingPathComponent(".probe")
+        do {
+            try Data([0x00]).write(to: probe)
+            try? fm.removeItem(at: probe)
+            return dir
+        } catch { return nil }
     }
 
-    /// 读：优先容器文件，回退 defaults，最后默认值；同时报告数据来自哪条通道（水印用）
+    /// 可写目录：兜底目录优先，其次 App Group 容器
+    static var writableDirs: [URL] {
+        var dirs: [URL] = []
+        if let d = mediaURL { dirs.append(d) }
+        if let d = containerURL { dirs.append(d) }
+        return dirs
+    }
+
+    /// 三通道写：defaults + 所有可写目录；返回是否至少有一处成功
+    @discardableResult
+    static func save(_ item: CountdownItem, for slot: WidgetSlot) -> Bool {
+        guard let d = try? JSONEncoder().encode(item) else { return false }
+        var ok = false
+        if let u = defaults {
+            u.set(d, forKey: "item.\(slot.rawValue)")
+            ok = true
+        }
+        for dir in writableDirs {
+            do {
+                try d.write(to: dir.appendingPathComponent("item.\(slot.rawValue).json"), options: .atomic)
+                ok = true
+            } catch { }
+        }
+        return ok
+    }
+
+    /// 读：三通道全部读一遍，取 savedAt 最新的那份（自动避开某个通道失效）
     static func itemWithSource(for slot: WidgetSlot) -> (CountdownItem, String) {
-        if let dir = containerURL,
-           let d = try? Data(contentsOf: dir.appendingPathComponent("item.\(slot.rawValue).json")),
-           let it = try? JSONDecoder().decode(CountdownItem.self, from: d) {
-            return (it, "F")
+        var best: (CountdownItem, String)? = nil
+        func consider(_ d: Data?, _ tag: String) {
+            guard let d = d, let it = try? JSONDecoder().decode(CountdownItem.self, from: d) else { return }
+            if best == nil || it.savedAt > best!.0.savedAt { best = (it, tag) }
         }
-        if let d = defaults?.data(forKey: "item.\(slot.rawValue)"),
-           let it = try? JSONDecoder().decode(CountdownItem.self, from: d) {
-            return (it, "D")
+        if let m = mediaURL {
+            consider(try? Data(contentsOf: m.appendingPathComponent("item.\(slot.rawValue).json")), "M")
         }
+        if let c = containerURL {
+            consider(try? Data(contentsOf: c.appendingPathComponent("item.\(slot.rawValue).json")), "F")
+        }
+        consider(defaults?.data(forKey: "item.\(slot.rawValue)"), "D")
+        if let b = best { return b }
         return (CountdownItem(), "—")
     }
 
@@ -136,27 +168,32 @@ enum WidgetStore {
         itemWithSource(for: slot).0
     }
 
-    /// 照片只能走容器文件；返回是否成功，失败要在 UI 上暴露而不是静默
+    /// 照片写入所有可写目录；返回是否至少一处成功
     @discardableResult
     static func savePhoto(_ data: Data, for slot: WidgetSlot) -> Bool {
-        guard let dir = containerURL else { return false }
-        do {
-            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            try data.write(to: dir.appendingPathComponent("photo.\(slot.rawValue).img"), options: .atomic)
-            return true
-        } catch {
-            return false
+        var ok = false
+        for dir in writableDirs {
+            do {
+                try data.write(to: dir.appendingPathComponent("photo.\(slot.rawValue).img"), options: .atomic)
+                ok = true
+            } catch { }
         }
+        return ok
     }
 
     static func photoData(for slot: WidgetSlot) -> Data? {
-        guard let dir = containerURL else { return nil }
-        let url = dir.appendingPathComponent("photo.\(slot.rawValue).img")
-        return FileManager.default.fileExists(atPath: url.path) ? (try? Data(contentsOf: url)) : nil
+        for dir in writableDirs {
+            let u = dir.appendingPathComponent("photo.\(slot.rawValue).img")
+            if FileManager.default.fileExists(atPath: u.path),
+               let d = try? Data(contentsOf: u), !d.isEmpty {
+                return d
+            }
+        }
+        return nil
     }
 
     static func clearPhoto(for slot: WidgetSlot) {
-        if let dir = containerURL {
+        for dir in writableDirs {
             try? FileManager.default.removeItem(at: dir.appendingPathComponent("photo.\(slot.rawValue).img"))
         }
         defaults?.removeObject(forKey: "photo.\(slot.rawValue)")
@@ -166,28 +203,25 @@ enum WidgetStore {
         WidgetCenter.shared.reloadAllTimelines()
     }
 
-    /// 诊断：App 内直接展示每一环的状态，一眼看出通道断在哪
+    static func shortPath(_ p: String) -> String {
+        p.split(separator: "/").suffix(2).joined(separator: "/")
+    }
+
+    /// 诊断：三条通道逐个报告
     static func diagnosis() -> [String] {
         var lines: [String] = []
-        let fm = FileManager.default
-        if let dir = containerURL {
-            lines.append("✅ 容器: …/\(dir.path.split(separator: "/").suffix(2).joined(separator: "/"))")
-            for slot in WidgetSlot.allCases {
-                let jp = dir.appendingPathComponent("item.\(slot.rawValue).json")
-                let it = item(for: slot)
-                lines.append("item.\(slot.rawValue): \(fm.fileExists(atPath: jp.path) ? "文件✓" : "文件✗") 标题「\(it.title)」")
-                let pp = dir.appendingPathComponent("photo.\(slot.rawValue).img")
-                if let attr = try? fm.attributesOfItem(atPath: pp.path), let size = attr[.size] as? Int, size > 0 {
-                    lines.append("photo.\(slot.rawValue): \(size / 1024)KB")
-                } else {
-                    lines.append("photo.\(slot.rawValue): 无")
-                }
-            }
+        lines.append("M 兜底目录: " + (mediaURL != nil ? "✅ 可写" : "❌ 不可用"))
+        if let c = containerURL {
+            lines.append("F App Group: ✅ \(shortPath(c.path))")
         } else {
-            lines.append("❌ App Group 容器不可用（entitlement 未生效）")
-            lines.append("→ 重装 IPA 或检查巨魔安装日志")
+            lines.append("F App Group: ❌ nil")
         }
-        lines.append("UserDefaults(suite): \(defaults != nil ? "对象可用" : "nil")")
+        lines.append("D defaults: " + (defaults != nil ? "对象可用" : "nil"))
+        for slot in WidgetSlot.allCases {
+            let (it, src) = itemWithSource(for: slot)
+            let photo = photoData(for: slot).map { "\($0.count / 1024)KB" } ?? "无"
+            lines.append("\(slot.rawValue): [\(src)] 标题「\(it.title)」照片 \(photo)")
+        }
         return lines
     }
 }
