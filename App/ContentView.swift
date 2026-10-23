@@ -212,6 +212,7 @@ struct PhotoPicker: UIViewControllerRepresentable {
                 parent.onPick(nil); return
             }
             provider.loadObject(ofClass: UIImage.self) { obj, _ in
+                let parent = self.parent
                 DispatchQueue.main.async {
                     guard let img = obj as? UIImage else { parent.onPick(nil); return }
                     parent.onPick(img.jpegData(compressionQuality: 0.92))
