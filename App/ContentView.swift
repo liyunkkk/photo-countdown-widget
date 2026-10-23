@@ -257,6 +257,7 @@ struct ContentView: View {
     }
 
     private func save() {
+        item.savedAt = Date().timeIntervalSince1970
         WidgetStore.save(item, for: slot)
 
         var photoOK = true
@@ -323,12 +324,17 @@ struct ContentView: View {
     }
 
     private var tips: some View {
-        Text("桌面长按空白 → ＋ → 搜索 Love Time → 添加 2×2 / 2×4。每个尺寸对应这里各自的配置。")
-            .font(.caption2)
-            .foregroundColor(.secondary.opacity(0.7))
-            .frame(maxWidth: .infinity)
-            .multilineTextAlignment(.center)
-            .padding(.bottom, 8)
+        let v = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
+        let b = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+        return VStack(spacing: 4) {
+            Text("桌面长按空白 → ＋ → 搜索 Love Time → 添加 2×2 / 2×4。每个尺寸对应这里各自的配置。")
+                .multilineTextAlignment(.center)
+            Text("Love Time v\(v) (\(b))")
+        }
+        .font(.caption2)
+        .foregroundColor(.secondary.opacity(0.7))
+        .frame(maxWidth: .infinity)
+        .padding(.bottom, 8)
     }
 
     // MARK: - 数据

@@ -23,19 +23,22 @@ struct CountdownItem: Codable, Equatable {
     var targetDate: Date
     var repeatMode: RepeatMode
     var countUpPlusOne: Bool
+    var savedAt: Double
 
     private enum CodingKeys: String, CodingKey {
-        case title, targetDate, repeatMode, countUpPlusOne
+        case title, targetDate, repeatMode, countUpPlusOne, savedAt
     }
 
     init(title: String = "倒计时",
          targetDate: Date = Calendar.current.date(from: DateComponents(year: 2027, month: 1, day: 1)) ?? Date(),
          repeatMode: RepeatMode = .none,
-         countUpPlusOne: Bool = false) {
+         countUpPlusOne: Bool = false,
+         savedAt: Double = 0) {
         self.title = title
         self.targetDate = targetDate
         self.repeatMode = repeatMode
         self.countUpPlusOne = countUpPlusOne
+        self.savedAt = savedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -44,6 +47,7 @@ struct CountdownItem: Codable, Equatable {
         targetDate = try c.decodeIfPresent(Date.self, forKey: .targetDate) ?? Date()
         repeatMode = (try? c.decodeIfPresent(RepeatMode.self, forKey: .repeatMode)) ?? .none
         countUpPlusOne = (try? c.decodeIfPresent(Bool.self, forKey: .countUpPlusOne)) ?? false
+        savedAt = (try? c.decodeIfPresent(Double.self, forKey: .savedAt)) ?? 0
     }
 
     /// 处理重复后的实际目标时间
@@ -114,18 +118,22 @@ enum WidgetStore {
         }
     }
 
-    /// 读：优先容器文件（与 UserDefaults 相同内容，文件通道更稳），回退 defaults，最后默认值
-    static func item(for slot: WidgetSlot) -> CountdownItem {
+    /// 读：优先容器文件，回退 defaults，最后默认值；同时报告数据来自哪条通道（水印用）
+    static func itemWithSource(for slot: WidgetSlot) -> (CountdownItem, String) {
         if let dir = containerURL,
            let d = try? Data(contentsOf: dir.appendingPathComponent("item.\(slot.rawValue).json")),
            let it = try? JSONDecoder().decode(CountdownItem.self, from: d) {
-            return it
+            return (it, "F")
         }
         if let d = defaults?.data(forKey: "item.\(slot.rawValue)"),
            let it = try? JSONDecoder().decode(CountdownItem.self, from: d) {
-            return it
+            return (it, "D")
         }
-        return CountdownItem()
+        return (CountdownItem(), "—")
+    }
+
+    static func item(for slot: WidgetSlot) -> CountdownItem {
+        itemWithSource(for: slot).0
     }
 
     /// 照片只能走容器文件；返回是否成功，失败要在 UI 上暴露而不是静默

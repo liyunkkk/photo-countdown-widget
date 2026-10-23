@@ -7,6 +7,7 @@ struct PhotoEntry: TimelineEntry {
     let date: Date
     let item: CountdownItem
     let photo: UIImage?
+    let src: String
 }
 
 struct Provider: TimelineProvider {
@@ -14,7 +15,7 @@ struct Provider: TimelineProvider {
         PhotoEntry(date: Date(),
                    item: CountdownItem(title: "恋爱中",
                                        targetDate: Calendar.current.date(byAdding: .day, value: 30, to: Date()) ?? Date()),
-                   photo: nil)
+                   photo: nil, src: "—")
     }
 
     func getSnapshot(in context: Context, completion: @escaping (PhotoEntry) -> Void) {
@@ -38,9 +39,9 @@ struct Provider: TimelineProvider {
 
     private func entry(for context: Context, at date: Date) -> PhotoEntry {
         let s = slot(for: context)
-        let item = WidgetStore.item(for: s)
+        let (item, src) = WidgetStore.itemWithSource(for: s)
         let photo = WidgetStore.photoData(for: s).flatMap { UIImage(data: $0) }
-        return PhotoEntry(date: date, item: item, photo: photo)
+        return PhotoEntry(date: date, item: item, photo: photo, src: src)
     }
 }
 
@@ -53,10 +54,20 @@ struct PhotoCountdownView: View {
     var body: some View {
         let slot: WidgetSlot = (family == .systemSmall) ? .small : .medium
         WidgetVisual(slot: slot,
-                     photo: WidgetStore.photoData(for: slot).flatMap { UIImage(data: $0) },
-                     item: WidgetStore.item(for: slot),
-                     date: entry.date)
+                     photo: entry.photo,
+                     item: entry.item,
+                     date: entry.date,
+                     debugTag: Self.tag(src: entry.src, item: entry.item))
             .widgetBackground()
+    }
+
+    /// 右上角调试水印：v版本 通道 保存时间（如 v12 F 14:05）
+    static func tag(src: String, item: CountdownItem) -> String {
+        let v = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+        guard item.savedAt > 0 else { return "v\(v) \(src)" }
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm"
+        return "v\(v) \(src) \(f.string(from: Date(timeIntervalSince1970: item.savedAt)))"
     }
 }
 

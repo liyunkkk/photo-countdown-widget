@@ -16,6 +16,7 @@ struct WidgetVisual: View {
     let photo: UIImage?
     let item: CountdownItem
     let date: Date
+    var debugTag: String = ""   // 调试用右上角水印，App 预览留空
 
     private var isSmall: Bool { slot == .small }
 
@@ -32,6 +33,19 @@ struct WidgetVisual: View {
                     // 关键：必须让 VStack 撑满整个小组件，Spacer 才能把底部块压下去
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     .padding(isSmall ? 12 : 14)
+                if !debugTag.isEmpty {
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Spacer()
+                            Text(debugTag)
+                                .font(.system(size: 8, weight: .medium, design: .monospaced))
+                                .foregroundColor(.white.opacity(0.6))
+                                .padding(.trailing, 9)
+                                .padding(.bottom, 6)
+                        }
+                    }
+                }
             }
             .clipped()
         }
