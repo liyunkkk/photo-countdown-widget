@@ -158,7 +158,7 @@ extension View {
     @ViewBuilder
     func widgetBackground(@ViewBuilder _ bg: () -> some View) -> some View {
         if #available(iOSApplicationExtension 17.0, *) {
-            containerBackground(for: .widget, background: bg)
+            containerBackground(for: .widget) { bg() }
         } else {
             background(bg())
         }
