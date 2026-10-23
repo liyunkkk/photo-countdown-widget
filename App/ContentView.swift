@@ -377,9 +377,11 @@ struct ContentView: View {
     // MARK: - 数据
 
     private func load() {
+        WidgetStore.writeHeartbeat()   // 让小组件能判断 App 侧通道是否可用
         item = WidgetStore.item(for: slot)
         photo = WidgetStore.photoData(for: slot).flatMap { UIImage(data: $0) }
         diag = WidgetStore.diagnosis()
+        WidgetStore.reloadTimelines()
     }
 }
 

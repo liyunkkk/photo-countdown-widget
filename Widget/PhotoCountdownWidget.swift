@@ -53,12 +53,17 @@ struct PhotoCountdownView: View {
 
     var body: some View {
         let slot: WidgetSlot = (family == .systemSmall) ? .small : .medium
-        WidgetVisual(slot: slot,
-                     photo: entry.photo,
-                     item: entry.item,
-                     date: entry.date,
-                     debugTag: Self.tag(src: entry.src, item: entry.item))
-            .widgetBackground()
+        if entry.item.savedAt == 0 {
+            DiagnosisVisual(family: family)
+                .widgetBackground()
+        } else {
+            WidgetVisual(slot: slot,
+                         photo: entry.photo,
+                         item: entry.item,
+                         date: entry.date,
+                         debugTag: Self.tag(src: entry.src, item: entry.item))
+                .widgetBackground()
+        }
     }
 
     /// 右上角调试水印：v版本 通道 保存时间（如 v12 F 14:05）
@@ -70,6 +75,37 @@ struct PhotoCountdownView: View {
         return "v\(v) \(src) \(f.string(from: Date(timeIntervalSince1970: item.savedAt)))"
     }
 }
+
+// MARK: - 诊断视图（没有数据时直接显示通道状态）
+
+struct DiagnosisVisual: View {
+    @Environment(\.widgetFamily) var envFamily
+
+    var body: some View {
+        let f = WidgetStore.channelFlags()
+        let v = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+        VStack(alignment: .leading, spacing: 5) {
+            Text("等待 App 数据")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(.white)
+            Text("M \(f.m ? "✅" : "❌")   F \(f.f ? "✅" : "❌")   D \(f.d ? "✅" : "❌")")
+                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                .foregroundColor(.white.opacity(0.95))
+            Spacer(minLength: 0)
+            Text("打开 Love Time 一次即可 · v\(v)")
+                .font(.system(size: 8, design: .monospaced))
+                .foregroundColor(.white.opacity(0.6))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(12)
+        .background(
+            LinearGradient(colors: [Color(red: 0.13, green: 0.11, blue: 0.18),
+                                    Color(red: 0.07, green: 0.06, blue: 0.10)],
+                           startPoint: .top, endPoint: .bottom)
+        )
+    }
+}
+
 
 extension View {
     @ViewBuilder

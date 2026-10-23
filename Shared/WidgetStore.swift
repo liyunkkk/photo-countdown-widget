@@ -199,6 +199,29 @@ enum WidgetStore {
         defaults?.removeObject(forKey: "photo.\(slot.rawValue)")
     }
 
+    /// 心跳：App 每次启动写一遍，让小组件能判断"App 这一侧的通道通不通"
+    static func writeHeartbeat() {
+        let ts = String(Date().timeIntervalSince1970)
+        if let u = defaults { u.set(ts, forKey: "heartbeat") }
+        for dir in writableDirs {
+            try? Data(ts.utf8).write(to: dir.appendingPathComponent("heartbeat.txt"), options: .atomic)
+        }
+    }
+
+    /// 三条通道各自是否留下了心跳
+    static func channelFlags() -> (m: Bool, f: Bool, d: Bool) {
+        let fm = FileManager.default
+        var m = false, f = false, d = false
+        if let md = mediaURL {
+            m = fm.fileExists(atPath: md.appendingPathComponent("heartbeat.txt").path)
+        }
+        if let c = containerURL {
+            f = fm.fileExists(atPath: c.appendingPathComponent("heartbeat.txt").path)
+        }
+        d = defaults?.string(forKey: "heartbeat") != nil
+        return (m, f, d)
+    }
+
     static func reloadTimelines() {
         WidgetCenter.shared.reloadAllTimelines()
     }
