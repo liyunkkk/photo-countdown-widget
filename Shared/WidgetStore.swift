@@ -1,4 +1,5 @@
 import Foundation
+import WidgetKit
 
 enum RepeatMode: Int, Codable, CaseIterable, Identifiable {
     case none = 0
