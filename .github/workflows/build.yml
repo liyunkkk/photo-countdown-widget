@@ -1,0 +1,35 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate Xcode project
+        run: brew install xcodegen && xcodegen generate
+
+      - name: Build (unsigned, iphoneos)
+        run: |
+          set -e
+          xcodebuild -project PhotoWidget.xcodeproj -scheme PhotoWidget \
+            -sdk iphoneos -configuration Release \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" \
+            -derivedDataPath build
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/PhotoWidget.app Payload/
+          zip -qry PhotoWidget.ipa Payload
+          ls -la PhotoWidget.ipa
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: PhotoWidget-ipa
+          path: PhotoWidget.ipa
+          retention-days: 14
