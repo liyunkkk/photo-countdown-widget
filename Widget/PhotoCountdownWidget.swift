@@ -54,7 +54,7 @@ struct PhotoCountdownView: View {
     var body: some View {
         let slot: WidgetSlot = (family == .systemSmall) ? .small : .medium
         if entry.item.savedAt == 0 {
-            DiagnosisVisual(family: family)
+            DiagnosisVisual()
                 .widgetBackground()
         } else {
             WidgetVisual(slot: slot,
