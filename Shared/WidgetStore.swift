@@ -223,7 +223,16 @@ enum WidgetStore {
     }
 
     static func reloadTimelines() {
+        // WidgetKit 有时会忽略单次请求，连续打几次更稳
+        WidgetCenter.shared.reloadTimelines(ofKind: "PhotoCountdown")
         WidgetCenter.shared.reloadAllTimelines()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            WidgetCenter.shared.reloadTimelines(ofKind: "PhotoCountdown")
+            WidgetCenter.shared.reloadAllTimelines()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            WidgetCenter.shared.reloadTimelines(ofKind: "PhotoCountdown")
+        }
     }
 
     static func shortPath(_ p: String) -> String {

@@ -28,7 +28,7 @@ struct Provider: TimelineProvider {
         var t = Date()
         for _ in 0..<24 {
             entries.append(entry(for: context, at: t))
-            t = cal.date(byAdding: .minute, value: 60, to: t) ?? t.addingTimeInterval(3600)
+            t = cal.date(byAdding: .minute, value: 30, to: t) ?? t.addingTimeInterval(1800)
         }
         completion(Timeline(entries: entries, policy: .atEnd))
     }

@@ -239,8 +239,9 @@ struct ContentView: View {
     // MARK: - 保存
 
     private var saveButton: some View {
-        Button(action: save) {
-            HStack(spacing: 7) {
+        VStack(spacing: 10) {
+            Button(action: save) {
+                HStack(spacing: 7) {
                 Image(systemName: savedFlash ? "checkmark.circle.fill" : "arrow.triangle.2.circlepath.circle.fill")
                 Text(savedFlash ? "已保存 · 小组件刷新中" : "保存并刷新小组件")
                     .font(.body.weight(.bold))
@@ -253,8 +254,25 @@ struct ContentView: View {
                     .fill(LinearGradient(colors: [accent, Color(red: 0.72, green: 0.27, blue: 0.85)],
                                          startPoint: .leading, endPoint: .trailing))
             )
+            }
+            .buttonStyle(.plain)
+
+            Button(action: { WidgetStore.reloadTimelines() }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.clockwise")
+                    Text("强制刷新小组件")
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundColor(.secondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .fill(Color.secondary.opacity(0.12))
+                )
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
     }
 
     private func save() {
