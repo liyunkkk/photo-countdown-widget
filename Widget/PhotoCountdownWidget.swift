@@ -123,7 +123,7 @@ extension View {
 @main
 struct PhotoCountdownWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "PhotoCountdown", provider: Provider()) { entry in
+        StaticConfiguration(kind: "LoveTimeWidget", provider: Provider()) { entry in
             PhotoCountdownView(entry: entry)
         }
         .configurationDisplayName("Love Time")
