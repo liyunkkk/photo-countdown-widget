@@ -105,6 +105,50 @@ enum WidgetStore {
     static var defaults: UserDefaults? { UserDefaults(suiteName: appGroupId) }
     static var containerURL: URL? { FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupId) }
 
+    static let extBundleId = "com.qingxu.PhotoWidgetExtension"
+
+    /// 扩展自己的数据容器（扩展读自己的容器永远有权限；App 通过扫描 PluginKitPlugin 定位）
+    static func extensionStoreDir(create: Bool) -> URL? {
+        let fm = FileManager.default
+        var target: URL?
+        // 1) 扩展进程内：直接用自身的 Library
+        if let lib = fm.urls(for: .libraryDirectory, in: .userDomainMask).first,
+           lib.path.contains("PluginKitPlugin") {
+            target = lib.appendingPathComponent("LoveTime", isDirectory: true)
+        }
+        // 2) App 进程内：扫描所有扩展容器，按 metadata 里的 identifier 精确匹配
+        if target == nil {
+            let base = URL(fileURLWithPath: "/var/mobile/Containers/Data/PluginKitPlugin", isDirectory: true)
+            if let kids = try? fm.contentsOfDirectory(at: base, includingPropertiesForKeys: nil) {
+                for k in kids {
+                    let meta = k.appendingPathComponent(".com.apple.mobile_container_manager.metadata.plist")
+                    guard let data = try? Data(contentsOf: meta),
+                          let obj = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any],
+                          let ident = obj["MCMMetadataIdentifier"] as? String,
+                          ident == extBundleId else { continue }
+                    target = k.appendingPathComponent("Library/LoveTime", isDirectory: true)
+                    break
+                }
+            }
+        }
+        guard let dir = target else { return nil }
+        if create, !fm.fileExists(atPath: dir.path) {
+            try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+        return fm.fileExists(atPath: dir.path) ? dir : (create ? nil : dir)
+    }
+
+    /// 扩展容器可写探测
+    static var extURL: URL? {
+        guard let dir = extensionStoreDir(create: true) else { return nil }
+        let probe = dir.appendingPathComponent(".probe")
+        do {
+            try Data([0x00]).write(to: probe)
+            try? FileManager.default.removeItem(at: probe)
+            return dir
+        } catch { return nil }
+    }
+
     /// 兜底目录：不存在则创建，并做真实写探测（只探测不写脏文件）
     static var mediaURL: URL? {
         let fm = FileManager.default
@@ -123,6 +167,7 @@ enum WidgetStore {
     /// 可写目录：兜底目录优先，其次 App Group 容器
     static var writableDirs: [URL] {
         var dirs: [URL] = []
+        if let d = extURL { dirs.append(d) }
         if let d = mediaURL { dirs.append(d) }
         if let d = containerURL { dirs.append(d) }
         return dirs
@@ -152,6 +197,9 @@ enum WidgetStore {
         func consider(_ d: Data?, _ tag: String) {
             guard let d = d, let it = try? JSONDecoder().decode(CountdownItem.self, from: d) else { return }
             if best == nil || it.savedAt > best!.0.savedAt { best = (it, tag) }
+        }
+        if let e = extensionStoreDir(create: false) {
+            consider(try? Data(contentsOf: e.appendingPathComponent("item.\(slot.rawValue).json")), "E")
         }
         if let m = mediaURL {
             consider(try? Data(contentsOf: m.appendingPathComponent("item.\(slot.rawValue).json")), "M")
@@ -209,9 +257,12 @@ enum WidgetStore {
     }
 
     /// 三条通道各自是否留下了心跳
-    static func channelFlags() -> (m: Bool, f: Bool, d: Bool) {
+    static func channelFlags() -> (e: Bool, m: Bool, f: Bool, d: Bool) {
         let fm = FileManager.default
-        var m = false, f = false, d = false
+        var e = false, m = false, f = false, d = false
+        if let ed = extensionStoreDir(create: false) {
+            e = fm.fileExists(atPath: ed.appendingPathComponent("heartbeat.txt").path)
+        }
         if let md = mediaURL {
             m = fm.fileExists(atPath: md.appendingPathComponent("heartbeat.txt").path)
         }
@@ -219,7 +270,7 @@ enum WidgetStore {
             f = fm.fileExists(atPath: c.appendingPathComponent("heartbeat.txt").path)
         }
         d = defaults?.string(forKey: "heartbeat") != nil
-        return (m, f, d)
+        return (e, m, f, d)
     }
 
     static func reloadTimelines() {
@@ -242,6 +293,7 @@ enum WidgetStore {
     /// 诊断：三条通道逐个报告
     static func diagnosis() -> [String] {
         var lines: [String] = []
+        lines.append("E 扩展容器: " + (extURL != nil ? "✅ 可写" : "❌ 不可用"))
         lines.append("M 兜底目录: " + (mediaURL != nil ? "✅ 可写" : "❌ 不可用"))
         if let c = containerURL {
             lines.append("F App Group: ✅ \(shortPath(c.path))")
