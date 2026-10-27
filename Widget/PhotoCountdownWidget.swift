@@ -88,7 +88,7 @@ struct DiagnosisVisual: View {
             Text("等待 App 数据")
                 .font(.system(size: 12, weight: .bold))
                 .foregroundColor(.white)
-            Text("E \(f.e ? "✅" : "❌")  M \(f.m ? "✅" : "❌")  F \(f.f ? "✅" : "❌")  D \(f.d ? "✅" : "❌")")
+            Text("B\(f.b ? 1 : 0) E\(f.e ? 1 : 0) M\(f.m ? 1 : 0) F\(f.f ? 1 : 0) D\(f.d ? 1 : 0)")
                 .font(.system(size: 13, weight: .semibold, design: .monospaced))
                 .foregroundColor(.white.opacity(0.95))
             Spacer(minLength: 0)

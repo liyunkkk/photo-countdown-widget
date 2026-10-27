@@ -138,6 +138,30 @@ enum WidgetStore {
         return fm.fileExists(atPath: dir.path) ? dir : (create ? nil : dir)
     }
 
+    /// B 通道：App bundle 内的 LoveTimeData 目录（扩展读父级 bundle 系统放行）
+    static var appBundleDir: URL {
+        let b = Bundle.main.bundleURL
+        if b.pathExtension == "appex" {
+            return b.deletingLastPathComponent().deletingLastPathComponent()
+        }
+        return b
+    }
+    static var bundleStoreDir: URL { appBundleDir.appendingPathComponent("LoveTimeData", isDirectory: true) }
+
+    static var bundleURL: URL? {
+        let fm = FileManager.default
+        let dir = bundleStoreDir
+        if !fm.fileExists(atPath: dir.path) {
+            try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+        let probe = dir.appendingPathComponent(".probe")
+        do {
+            try Data([0x00]).write(to: probe)
+            try? fm.removeItem(at: probe)
+            return dir
+        } catch { return nil }
+    }
+
     /// 扩展容器可写探测
     static var extURL: URL? {
         guard let dir = extensionStoreDir(create: true) else { return nil }
@@ -167,6 +191,7 @@ enum WidgetStore {
     /// 可写目录：兜底目录优先，其次 App Group 容器
     static var writableDirs: [URL] {
         var dirs: [URL] = []
+        if let d = bundleURL { dirs.append(d) }
         if let d = extURL { dirs.append(d) }
         if let d = mediaURL { dirs.append(d) }
         if let d = containerURL { dirs.append(d) }
@@ -198,6 +223,7 @@ enum WidgetStore {
             guard let d = d, let it = try? JSONDecoder().decode(CountdownItem.self, from: d) else { return }
             if best == nil || it.savedAt > best!.0.savedAt { best = (it, tag) }
         }
+        consider(try? Data(contentsOf: bundleStoreDir.appendingPathComponent("item.\(slot.rawValue).json")), "B")
         if let e = extensionStoreDir(create: false) {
             consider(try? Data(contentsOf: e.appendingPathComponent("item.\(slot.rawValue).json")), "E")
         }
@@ -257,9 +283,10 @@ enum WidgetStore {
     }
 
     /// 三条通道各自是否留下了心跳
-    static func channelFlags() -> (e: Bool, m: Bool, f: Bool, d: Bool) {
+    static func channelFlags() -> (b: Bool, e: Bool, m: Bool, f: Bool, d: Bool) {
         let fm = FileManager.default
-        var e = false, m = false, f = false, d = false
+        var b = false, e = false, m = false, f = false, d = false
+        b = fm.fileExists(atPath: bundleStoreDir.appendingPathComponent("heartbeat.txt").path)
         if let ed = extensionStoreDir(create: false) {
             e = fm.fileExists(atPath: ed.appendingPathComponent("heartbeat.txt").path)
         }
@@ -270,7 +297,7 @@ enum WidgetStore {
             f = fm.fileExists(atPath: c.appendingPathComponent("heartbeat.txt").path)
         }
         d = defaults?.string(forKey: "heartbeat") != nil
-        return (e, m, f, d)
+        return (b, e, m, f, d)
     }
 
     static func reloadTimelines() {
@@ -293,7 +320,8 @@ enum WidgetStore {
     /// 诊断：三条通道逐个报告
     static func diagnosis() -> [String] {
         var lines: [String] = []
-        lines.append("E 扩展容器: " + (extURL != nil ? "✅ 可写" : "❌ 不可用"))
+        lines.append("B bundle: " + (bundleURL != nil ? "可写" : "不可用"))
+        lines.append("E 扩展容器: " + (extURL != nil ? "可写" : "不可用"))
         lines.append("M 兜底目录: " + (mediaURL != nil ? "✅ 可写" : "❌ 不可用"))
         if let c = containerURL {
             lines.append("F App Group: ✅ \(shortPath(c.path))")
